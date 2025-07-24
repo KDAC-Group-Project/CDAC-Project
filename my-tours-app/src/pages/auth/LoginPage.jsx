@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../contexts/AuthContext';
 import { Lock, Eye, EyeOff } from 'lucide-react';
+import './LoginPage.css'; // <--- custom styles here
 
 function LoginPage() {
   const { setUser } = useContext(AuthContext);
@@ -12,15 +13,14 @@ function LoginPage() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-   const loginUser = async (email, password) => {
+  const loginUser = async (email, password) => {
     return new Promise((resolve) => {
       setTimeout(() => {
         if (email === 'admin@toursandtravels.com' && password === 'admin123') {
           resolve({
             status: 'success',
             data: {
-              firstName: 'Admin',
-              lastName: 'User',
+              name: 'Admin User',
               role: 'admin',
               token: 'admin-token-123'
             }
@@ -29,8 +29,7 @@ function LoginPage() {
           resolve({
             status: 'success',
             data: {
-              firstName: 'John',
-              lastName: 'Doe',
+              name: 'John Doe',
               role: 'user',
               token: 'user-token-123'
             }
@@ -46,11 +45,11 @@ function LoginPage() {
   };
 
   const onLogin = async () => {
-    if (email.length === 0) {
+    if (!email) {
       toast.warn('Please enter email');
       return;
     }
-    if (password.length === 0) {
+    if (!password) {
       toast.warn('Please enter password');
       return;
     }
@@ -58,23 +57,18 @@ function LoginPage() {
     setLoading(true);
     try {
       const result = await loginUser(email, password);
-      
+
       if (result.status === 'success') {
         const { name, role, token } = result.data;
-        
+
         sessionStorage.setItem('name', name);
         sessionStorage.setItem('role', role);
         sessionStorage.setItem('token', token);
-        
+
         setUser({ name, role });
-        
+
         toast.success('Welcome to Final Destination!');
-        
-        if (role === 'admin') {
-          navigate('/admin');
-        } else {
-          navigate('/user');
-        }
+        navigate(role === 'admin' ? '/admin' : '/user');
       } else {
         toast.error('Invalid email or password');
       }
@@ -86,88 +80,83 @@ function LoginPage() {
   };
 
   return (
-    <div className='container'>
-      <div className="text-center">
-          <h2 className="mt-6">
-            Welcome Back
-          </h2>
-          <p className="mt-2 ">
-            Sign in to your Tours & Travels account
-          </p>
-          <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-            <p className="text-sm text-blue-800 font-medium">Demo Credentials:</p>
-            <p className="text-xs text-blue-700 mt-1">
-              Admin: admin@toursandtravels.com / admin123
-            </p>
-            <p className="text-xs text-blue-700">
-              User: user@example.com / user123
-            </p>
-          </div>
-        </div>
+    <div className="login-page-wrapper">
+      <div className="background-image" />
 
-      <div className='form'>
-        <div className='mb-3'>
-          <label htmlFor=''>Email</label>
-          <input
-            id='email'
-            name='email'
-            onChange={(e) => setEmail(e.target.value)}
-            type='email'
-            className='form-control'
-            placeholder='username@test.com'
-          />
-        </div>
-
-        <div className='mb-3'>
-          <label htmlFor=''>Password</label>
-           <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  id='password'
-                  name='password'
-                  onChange={(e) => setPassword(e.target.value)}
-                  type={showPassword ? 'text' : 'password'}
-                  className='form-control'
-                  placeholder='#######'
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
+      <div className="container d-flex align-items-center justify-content-center min-vh-100 position-relative">
+        <div className="card shadow-sm p-4 login-card">
+          <div className="text-center mb-4">
+            <h3>Welcome Back</h3>
+            <p className="text-muted">Sign in to your Tours & Travels account</p>
+            <div className="alert alert-primary p-2 mt-3">
+              <p className="mb-1 small"><strong>Demo Credentials</strong></p>
+              <p className="mb-0 small">Admin: admin@toursandtravels.com / admin123</p>
+              <p className="mb-0 small">User: user@example.com / user123</p>
             </div>
-        </div>
+          </div>
 
-        <div>
+          <div className="mb-3">
+            <label htmlFor="email" className="form-label">Email</label>
+            <input
+              id="email"
+              name="email"
+              onChange={(e) => setEmail(e.target.value)}
+              type="email"
+              className="form-control"
+              placeholder="username@test.com"
+            />
+          </div>
+
+          <div className="mb-3">
+            <label htmlFor="password" className="form-label">Password</label>
+            <div className="input-group">
+              <span className="input-group-text bg-white">
+                <Lock size={16} />
+              </span>
+              <input
+                id="password"
+                name="password"
+                onChange={(e) => setPassword(e.target.value)}
+                type={showPassword ? 'text' : 'password'}
+                className="form-control"
+                placeholder="********"
+              />
+              <button
+                type="button"
+                className="btn btn-outline-secondary"
+                onClick={() => setShowPassword(!showPassword)}
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+
+          <div className="d-grid mb-3">
             <button
               onClick={onLogin}
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn btn-primary"
             >
               {loading ? (
-                <div className="flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                  Signing In...
-                </div>
-              ) : (
-                'Sign In'
-              )}
+                <span className="spinner-border spinner-border-sm me-2" role="status" />
+              ) : null}
+              {loading ? 'Signing In...' : 'Sign In'}
             </button>
-         </div>
+          </div>
 
-        <div className="text-center">
-              <p className="text-sm text-gray-600">
-                Don't have an account?{' '}
-                <Link to="/register" className="font-medium text-blue-600 hover:text-blue-500">
-                  Sign up here
-                </Link>
-              </p>
-            </div>
+          <div className="text-center">
+            <small className="text-muted">
+              Don't have an account?{' '}
+              <Link to="/register" className="text-decoration-none">
+                Sign up here
+              </Link>
+            </small>
+          </div>
+        </div>
       </div>
     </div>
-  )
+  );
 }
 
-export default LoginPage
+export default LoginPage;

@@ -186,7 +186,7 @@ function RegisterPage() {
 
                         <div className="text-center">
                             Already have an account?{' '}
-                            <Link to="/" className="text-primary text-decoration-none">
+                            <Link to="/login" className="text-primary text-decoration-none">
                                 Sign in here
                             </Link>
                         </div>

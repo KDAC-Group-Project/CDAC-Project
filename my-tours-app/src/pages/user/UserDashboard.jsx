@@ -21,16 +21,13 @@ const UserDashboard = () => {
   const tours = useSelector((state) => state.tours.tours);
   const bookings = useSelector((state) => state.bookings.bookings);
   const wishlistItems = useSelector((state) => state.wishlist.items);
+  // Get reviews from localStorage (as MyReviews uses local state)
+  const reviews = JSON.parse(localStorage.getItem('myReviews') || '[]');
 
-  // Mock user data - in a real app, this would come from the user profile
-  const userStats = {
-    totalBookings: 3,
-    upcomingTrips: 1,
-    reviewsGiven: 2,
-    countriesVisited: ['Maldives', 'Switzerland', 'India'],
-    totalSpent: 4250,
-    memberSince: '2023-06-15'
-  };
+  // Calculate stats
+  const totalBookings = bookings.length;
+  const countriesVisited = Array.from(new Set(bookings.map(b => b.destination)));
+  const reviewsGiven = reviews.length;
 
   // Get recent bookings (mock data)
   const recentBookings = bookings.slice(0, 3);
@@ -42,17 +39,21 @@ const UserDashboard = () => {
     return new Date(dateString).toLocaleDateString();
   };
 
+  // Placeholders for total spent and member since
+  const totalSpent = 4250;
+  const memberSince = '2023-06-15';
+
   const stats = [
     {
       title: 'Total Bookings',
-      value: userStats.totalBookings.toString(),
+      value: totalBookings.toString(),
       icon: Calendar,
       color: 'bg-blue-500',
       link: '/user/bookings'
     },
     {
       title: 'Upcoming Trips',
-      value: userStats.upcomingTrips.toString(),
+      value: bookings.filter(b => b.status === 'confirmed' && new Date(b.travelDate) > new Date()).length.toString(),
       icon: Clock,
       color: 'bg-emerald-500',
       link: '/user/bookings'
@@ -66,10 +67,17 @@ const UserDashboard = () => {
     },
     {
       title: 'Countries Visited',
-      value: userStats.countriesVisited.length.toString(),
+      value: countriesVisited.length.toString(),
       icon: MapPin,
       color: 'bg-purple-500',
       link: '/user/profile'
+    },
+    {
+      title: 'Reviews Given',
+      value: reviewsGiven.toString(),
+      icon: Star,
+      color: 'bg-yellow-500',
+      link: '/user/reviews'
     }
   ];
 
@@ -228,20 +236,18 @@ const UserDashboard = () => {
                     <p className="text-xs text-gray-600">Lifetime travel investment</p>
                   </div>
                 </div>
-                <span className="text-lg font-bold text-gray-900">${userStats.totalSpent}</span>
+                <span className="text-lg font-bold text-gray-900">${totalSpent}</span>
               </div>
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
-                  <div className="bg-emerald-100 p-2 rounded-lg">
-                    <Star className="w-5 h-5 text-emerald-600" />
-                  </div>
+                  <Star className="w-5 h-5 text-emerald-600" />
                   <div className="ml-3">
                     <p className="text-sm font-medium text-gray-900">Reviews Given</p>
                     <p className="text-xs text-gray-600">Help other travelers</p>
                   </div>
                 </div>
-                <span className="text-lg font-bold text-gray-900">{userStats.reviewsGiven}</span>
+                <span className="text-lg font-bold text-gray-900">{reviewsGiven}</span>
               </div>
 
               <div className="flex items-center justify-between">
@@ -255,14 +261,14 @@ const UserDashboard = () => {
                   </div>
                 </div>
                 <span className="text-sm font-medium text-gray-900">
-                  {formatDate(userStats.memberSince)}
+                  {formatDate(memberSince)}
                 </span>
               </div>
 
               <div>
                 <p className="text-sm font-medium text-gray-900 mb-2">Countries Visited</p>
                 <div className="flex flex-wrap gap-2">
-                  {userStats.countriesVisited.map((country, index) => (
+                  {countriesVisited.map((country, index) => (
                     <span
                       key={index}
                       className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium"

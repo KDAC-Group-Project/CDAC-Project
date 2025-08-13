@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { addToWishlist, removeFromWishlist } from '../../store/slices/wishlistSlice';
-import { addBooking } from '../../store/slices/bookingsSlice';
-import { Link } from 'react-router-dom';
+import { addToWishlistBackend, removeFromWishlistBackend, fetchWishlistFromBackend, setWishlistItems } from '../../store/slices/wishlistSlice';
+import { fetchTours } from '../../store/slices/toursSlice';
+import { Link, useNavigate } from 'react-router-dom';
+import { createBooking } from '../../services/api';
 import { 
   Search, 
   Filter, 
@@ -16,80 +17,151 @@ import {
 
 const BrowseTours = () => {
   const dispatch = useDispatch();
-  const tours = useSelector((state) => state.tours.tours);
+  const navigate = useNavigate();
+  const { tours, loading, error } = useSelector((state) => state.tours);
   const wishlistItems = useSelector((state) => state.wishlist.items);
+  const wishlistLoading = useSelector((state) => state.wishlist.loading);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [priceRange, setPriceRange] = useState('');
+  const token = sessionStorage.getItem('token');
 
-  const categories = ['Beach', 'Adventure', 'Cultural', 'Wildlife', 'City', 'Mountain'];
+  // Categories must match backend enum values
+  const categories = ['BEACH', 'ADVENTURE', 'CULTURAL', 'WILDLIFE', 'CITY', 'MOUNTAIN', 'CRUISE', 'FOOD'];
+
+  useEffect(() => {
+    dispatch(fetchTours());
+  }, [dispatch]);
+
+  // Fetch wishlist from backend when component mounts
+  useEffect(() => {
+    if (token) {
+      dispatch(fetchWishlistFromBackend());
+    }
+  }, [dispatch, token]);
 
   const filteredTours = tours.filter(tour => {
-    const matchesSearch = tour.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         tour.destination.toLowerCase().includes(searchQuery.toLowerCase());
+    const title = (tour.title || '').toLowerCase();
+    const destination = (tour.destination || '').toLowerCase();
+    const matchesSearch = title.includes(searchQuery.toLowerCase()) || destination.includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === '' || tour.category === selectedCategory;
+    const price = typeof tour.price === 'number' ? tour.price : parseFloat(tour.price || 0);
     const matchesPrice = priceRange === '' || 
-                        (priceRange === 'low' && tour.price < 500) ||
-                        (priceRange === 'medium' && tour.price >= 500 && tour.price < 1000) ||
-                        (priceRange === 'high' && tour.price >= 1000);
-    
-    return matchesSearch && matchesCategory && matchesPrice && tour.isActive;
+                        (priceRange === 'low' && price < 500) ||
+                        (priceRange === 'medium' && price >= 500 && price < 1000) ||
+                        (priceRange === 'high' && price >= 1000);
+    const active = tour.isActive !== false; // default to true if undefined
+    return matchesSearch && matchesCategory && matchesPrice && active;
   });
 
   const isInWishlist = (tourId) => {
     return wishlistItems.some(item => item.id === tourId);
   };
 
-  const handleWishlistToggle = (tour) => {
+  const imageForTour = (tour) => tour.tourImage || tour.imageUrl || 'https://via.placeholder.com/640x360?text=Tour+Image';
+
+  const handleWishlistToggle = async (tour) => {
+    if (!token) {
+      alert('Please sign in to save tours to your wishlist.');
+      navigate('/login');
+      return;
+    }
+
     if (isInWishlist(tour.id)) {
-      dispatch(removeFromWishlist(tour));
+      // Remove from wishlist
+      try {
+        await dispatch(removeFromWishlistBackend(tour.id)).unwrap();
+      } catch (err) {
+        alert('Failed to remove from wishlist: ' + err.message);
+      }
     } else {
-      dispatch(addToWishlist({
-        id: tour.id,
-        title: tour.title,
-        price: tour.price,
-        image: tour.image,
-        destination: tour.destination,
-        duration: tour.duration
-      }));
+      // Add to wishlist
+      try {
+        await dispatch(addToWishlistBackend(tour)).unwrap();
+        alert('Added to wishlist');
+      } catch (err) {
+        alert('Failed to add to wishlist: ' + (err?.message || 'Unknown error'));
+      }
     }
   };
 
-  const handleBookNow = (tour) => {
-    const today = new Date();
-    const travelDate = today.toISOString().split('T')[0];
-    const endDate = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // 3 days later
-    const booking = {
-      id: Date.now().toString(),
-      userId: 'user1', // Replace with actual user id from auth context if available
+  const handleBookNow = async (tour) => {
+    if (!token) {
+      alert('Please sign in to book this tour.');
+      navigate('/login');
+      return;
+    }
+    const start = new Date();
+    const travelDate = start.toISOString().split('T')[0];
+    const end = new Date(start.getTime() + (tour.duration || 1) * 24 * 60 * 60 * 1000);
+    const endDate = end.toISOString().split('T')[0];
+
+    const payload = {
       tourId: tour.id,
-      tourTitle: tour.title,
-      tourImage: tour.image,
-      destination: tour.destination,
-      userEmail: 'demo@example.com', // Replace with actual user email from auth context if available
-      userName: 'Demo User', // Replace with actual user name from auth context if available
-      bookingDate: travelDate,
-      travelDate: travelDate,
-      endDate: endDate,
+      travelDate,
+      endDate,
       guests: 1,
-      totalAmount: tour.price,
-      status: 'confirmed',
-      paymentStatus: 'paid',
-      paymentMethod: 'Credit Card',
-      createdAt: today.toISOString()
+      totalAmount: typeof tour.price === 'number' ? tour.price : parseFloat(tour.price || 0),
+      paymentMethod: 'Credit Card'
     };
-    dispatch(addBooking(booking));
-    alert('Booking added! Check My Bookings page.');
+
+    try {
+      // Remove from wishlist in DB first, then book
+      try {
+        await dispatch(removeFromWishlistBackend(tour.id)).unwrap();
+      } catch (removeErr) {
+        console.warn('Wishlist removal before booking failed:', removeErr);
+      }
+
+      await createBooking(payload);
+
+      // Optimistically update local wishlist immediately after booking
+      const remaining = wishlistItems.filter((i) => String(i.id) !== String(tour.id));
+      dispatch(setWishlistItems(remaining));
+      // Then re-fetch to ensure final consistency
+      dispatch(fetchWishlistFromBackend());
+
+      alert('Booking confirmed!');
+      navigate('/user/bookings');
+    } catch (err) {
+      alert(err.message || 'Failed to create booking');
+    }
   };
 
   const getDifficultyColor = (difficulty) => {
-    switch (difficulty) {
-      case 'easy': return 'bg-green-100 text-green-800';
-      case 'moderate': return 'bg-yellow-100 text-yellow-800';
-      case 'difficult': return 'bg-red-100 text-red-800';
+    const d = (difficulty || '').toString();
+    switch (d) {
+      case 'EASY': return 'bg-green-100 text-green-800';
+      case 'MODERATE': return 'bg-yellow-100 text-yellow-800';
+      case 'DIFFICULT': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
+
+  const formatLabel = (text) => {
+    if (!text) return '';
+    const s = text.toString();
+    return s.charAt(0) + s.slice(1).toLowerCase();
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
+        <p className="mt-4 text-gray-600">Loading tours...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <h3 className="text-lg font-medium text-gray-900 mb-2">Failed to load tours</h3>
+        <p className="text-gray-600">{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -122,7 +194,7 @@ const BrowseTours = () => {
           >
             <option value="">All Categories</option>
             {categories.map(category => (
-              <option key={category} value={category}>{category}</option>
+              <option key={category} value={category}>{formatLabel(category)}</option>
             ))}
           </select>
           
@@ -150,7 +222,7 @@ const BrowseTours = () => {
           <div key={tour.id} className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200 hover:shadow-lg transition-shadow group">
             <div className="relative">
               <img
-                src={tour.image}
+                src={imageForTour(tour)}
                 alt={tour.title}
                 className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
               />
@@ -166,12 +238,12 @@ const BrowseTours = () => {
               </button>
               <div className="absolute top-4 left-4">
                 <span className="px-2 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
-                  {tour.category}
+                  {formatLabel(tour.category)}
                 </span>
               </div>
               <div className="absolute bottom-4 left-4">
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${getDifficultyColor(tour.difficulty)}`}>
-                  {tour.difficulty.charAt(0).toUpperCase() + tour.difficulty.slice(1)}
+                  {formatLabel(tour.difficulty)}
                 </span>
               </div>
             </div>
@@ -197,11 +269,11 @@ const BrowseTours = () => {
                 </div>
                 <div className="flex items-center text-gray-600">
                   <Star className="w-4 h-4 mr-1 text-yellow-400" />
-                  {tour.rating} ({tour.reviewCount})
+                  {tour.rating || 0} ({tour.reviewCount || 0})
                 </div>
                 <div className="flex items-center text-gray-600">
                   <DollarSign className="w-4 h-4 mr-1" />
-                  ${tour.price}
+                  ${typeof tour.price === 'number' ? tour.price : parseFloat(tour.price || 0)}
                 </div>
               </div>
               

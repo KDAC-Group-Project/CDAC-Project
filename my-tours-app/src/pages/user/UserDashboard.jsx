@@ -1,7 +1,9 @@
-import React, { useContext } from 'react';
-import { useSelector } from 'react-redux';
+import React, { useContext, useEffect } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
 import { AuthContext } from '../../contexts/AuthContext';
 import { Link } from 'react-router-dom';
+import { fetchCurrentUserBookings } from '../../store/slices/bookingsSlice';
+import { fetchTours } from '../../store/slices/toursSlice';
 import { 
   Calendar, 
   MapPin, 
@@ -18,19 +20,30 @@ import {
 
 const UserDashboard = () => {
   const { user } = useContext(AuthContext);
+  const dispatch = useDispatch();
   const tours = useSelector((state) => state.tours.tours);
-  const bookings = useSelector((state) => state.bookings.bookings);
+  const currentUserBookings = useSelector((state) => state.bookings.currentUserBookings);
   const wishlistItems = useSelector((state) => state.wishlist.items);
+  const loading = useSelector((state) => state.bookings.loading || state.tours.loading);
   // Get reviews from localStorage (as MyReviews uses local state)
   const reviews = JSON.parse(localStorage.getItem('myReviews') || '[]');
 
-  // Calculate stats
-  const totalBookings = bookings.length;
-  const countriesVisited = Array.from(new Set(bookings.map(b => b.destination)));
+  useEffect(() => {
+    if (user) {
+      dispatch(fetchCurrentUserBookings());
+      dispatch(fetchTours());
+    }
+  }, [dispatch, user]);
+
+  // Calculate stats with safe fallbacks
+  const totalBookings = currentUserBookings.length;
+  const countriesVisited = Array.from(new Set(currentUserBookings.map(b => b.destination || b.tour?.destination).filter(Boolean)));
   const reviewsGiven = reviews.length;
 
-  // Get recent bookings (mock data)
-  const recentBookings = bookings.slice(0, 3);
+  // Get recent bookings (sorted by date)
+  const recentBookings = [...currentUserBookings]
+    .sort((a, b) => new Date(b.createdAt || b.bookingDate) - new Date(a.createdAt || a.bookingDate))
+    .slice(0, 3);
 
   // Get recommended tours based on user preferences
   const recommendedTours = tours.filter(tour => tour.isActive).slice(0, 4);
@@ -39,9 +52,13 @@ const UserDashboard = () => {
     return new Date(dateString).toLocaleDateString();
   };
 
-  // Placeholders for total spent and member since
-  const totalSpent = 4250;
-  const memberSince = '2023-06-15';
+  // Calculate total spent from actual bookings
+  const totalSpent = currentUserBookings
+    .filter(b => b.paymentStatus === 'paid')
+    .reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+  
+  // Get member since from user data or use current date as fallback
+  const memberSince = user?.createdAt || new Date().toISOString();
 
   const stats = [
     {
@@ -53,7 +70,7 @@ const UserDashboard = () => {
     },
     {
       title: 'Upcoming Trips',
-      value: bookings.filter(b => b.status === 'confirmed' && new Date(b.travelDate) > new Date()).length.toString(),
+      value: currentUserBookings.filter(b => b.status === 'confirmed' && new Date(b.travelDate || b.startDate) > new Date()).length.toString(),
       icon: Clock,
       color: 'bg-emerald-500',
       link: '/user/bookings'
@@ -80,6 +97,14 @@ const UserDashboard = () => {
       link: '/user/reviews'
     }
   ];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

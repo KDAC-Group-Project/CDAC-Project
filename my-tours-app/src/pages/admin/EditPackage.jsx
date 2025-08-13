@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
-import { updateTour } from '../../store/slices/toursSlice';
+import { getTourById } from '../../services/api';
 import { toast } from 'react-toastify';
 import { ArrowLeft, Plus, X } from 'lucide-react';
+import { useDispatch } from 'react-redux';
+import { updateTour } from '../../store/slices/toursSlice';
 
 const EditPackage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const tour = useSelector((state) => 
-    state.tours.tours.find(t => t.id === id)
-  );
   
   const [formData, setFormData] = useState({
     title: '',
@@ -31,38 +29,63 @@ const EditPackage = () => {
 
   const [includeItem, setIncludeItem] = useState('');
   const [imagePreview, setImagePreview] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const categories = ['Beach', 'Adventure', 'Cultural', 'Wildlife', 'City', 'Mountain'];
-  const difficulties = ['easy', 'moderate', 'difficult'];
+  const categories = ['BEACH', 'ADVENTURE', 'CULTURAL', 'WILDLIFE', 'CITY', 'MOUNTAIN', 'CRUISE', 'FOOD'];
+  const difficulties = ['EASY', 'MODERATE', 'DIFFICULT'];
 
   useEffect(() => {
-    if (tour) {
-      setFormData({
-        title: tour.title,
-        description: tour.description,
-        price: tour.price,
-        duration: tour.duration,
-        destination: tour.destination,
-        category: tour.category,
-        image: tour.image,
-        maxGroupSize: tour.maxGroupSize,
-        difficulty: tour.difficulty,
-        includes: tour.includes,
-        rating: tour.rating,
-        reviewCount: tour.reviewCount,
-        isActive: tour.isActive
-      });
-      setImagePreview(tour.image);
-    }
-  }, [tour]);
+    const fetchTour = async () => {
+      try {
+        setLoading(true);
+        const tour = await getTourById(id);
+        setFormData({
+          title: tour.title || '',
+          description: tour.description || '',
+          price: tour.price || 0,
+          duration: tour.duration || 1,
+          destination: tour.destination || '',
+          category: tour.category || '',
+          image: tour.tourImage || tour.imageUrl || '',
+          maxGroupSize: tour.maxGroupSize || 1,
+          difficulty: tour.difficulty || 'easy',
+          includes: tour.includes || [],
+          rating: tour.rating || 0,
+          reviewCount: tour.reviewCount || 0,
+          isActive: tour.isActive !== undefined ? tour.isActive : true
+        });
+        setImagePreview(tour.tourImage || tour.imageUrl || '');
+        setError(null);
+      } catch (err) {
+        console.error('Failed to fetch tour:', err);
+        setError(err.message || 'Failed to fetch tour');
+        toast.error('Failed to fetch tour details');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  if (!tour) {
+    fetchTour();
+  }, [id]);
+
+  if (loading) {
     return (
       <div className="text-center py-12">
-        <h2 className="text-2xl font-bold text-gray-900">Package not found</h2>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+        <p className="mt-4 text-gray-600">Loading tour details...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">Error Loading Tour</h2>
+        <p className="text-gray-600 mb-4">{error}</p>
         <button
           onClick={() => navigate('/admin/packages')}
-          className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
         >
           Back to Packages
         </button>
@@ -102,7 +125,7 @@ const EditPackage = () => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!formData.title.trim()) {
@@ -126,14 +149,28 @@ const EditPackage = () => {
       return;
     }
 
-    const updatedTour = {
-      ...tour,
-      ...formData
-    };
+    try {
+      const tourData = {
+        title: formData.title,
+        description: formData.description,
+        price: formData.price,
+        duration: formData.duration,
+        destination: formData.destination,
+        category: formData.category,
+        imageUrl: formData.image,
+        maxGroupSize: formData.maxGroupSize,
+        difficulty: String(formData.difficulty || '').toUpperCase(),
+        includes: formData.includes,
+        isActive: formData.isActive
+      };
 
-    dispatch(updateTour(updatedTour));
-    toast.success('Package updated successfully!');
-    navigate('/admin/packages');
+      await dispatch(updateTour({ id, tourData })).unwrap();
+      toast.success('Package updated successfully!');
+      navigate('/admin/packages');
+    } catch (error) {
+      console.error('Failed to update tour:', error);
+      toast.error(error.message || 'Failed to update package');
+    }
   };
 
   return (

@@ -1,5 +1,5 @@
-import React from 'react';
-import { useSelector } from 'react-redux';
+import React, { useEffect } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
 import { 
   Users, 
   Package, 
@@ -11,12 +11,24 @@ import {
   Clock
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
+import { fetchTours } from '../../store/slices/toursSlice';
+import { fetchAllBookings, fetchBookingStats } from '../../store/slices/bookingsSlice';
+import { fetchAllUsers } from '../../store/slices/usersSlice';
 
 const AdminDashboard = () => {
+  const dispatch = useDispatch();
   const tours = useSelector((state) => state.tours.tours);
   const bookings = useSelector((state) => state.bookings.bookings);
   const users = useSelector((state) => state.users.users);
-  const totalRevenue = useSelector((state) => state.bookings.totalRevenue);
+  const totalRevenue = useSelector((state) => state.bookings.stats?.totalRevenue || 0);
+  const loading = useSelector((state) => state.bookings.loading || state.tours.loading || state.users.loading);
+
+  useEffect(() => {
+    dispatch(fetchTours());
+    dispatch(fetchAllBookings());
+    dispatch(fetchAllUsers());
+    dispatch(fetchBookingStats());
+  }, [dispatch]);
 
   const activePackages = tours.filter(tour => tour.isActive).length;
   const totalUsers = users.filter(user => user.role === 'user').length;
@@ -25,7 +37,7 @@ const AdminDashboard = () => {
 
   // Recent bookings for the table
   const recentBookings = [...bookings]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .sort((a, b) => new Date(b.createdAt || b.bookingDate).getTime() - new Date(a.createdAt || a.bookingDate).getTime())
     .slice(0, 5);
 
   // Popular tours based on bookings
@@ -34,15 +46,27 @@ const AdminDashboard = () => {
     bookingCount: bookings.filter(booking => booking.tourId === tour.id).length
   })).sort((a, b) => b.bookingCount - a.bookingCount).slice(0, 5);
 
-  // Revenue chart data
-  const revenueData = [
-    { month: 'Jan', revenue: 12000 },
-    { month: 'Feb', revenue: 15000 },
-    { month: 'Mar', revenue: 18000 },
-    { month: 'Apr', revenue: 22000 },
-    { month: 'May', revenue: 25000 },
-    { month: 'Jun', revenue: 28000 }
-  ];
+  // Revenue chart data - derive from actual bookings data
+  const generateRevenueData = () => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const currentMonth = new Date().getMonth();
+    
+    return months.slice(Math.max(0, currentMonth - 5), currentMonth + 1).map((month, index) => {
+      const monthIndex = (currentMonth - 5 + index + 12) % 12;
+      const monthBookings = bookings.filter(booking => {
+        const bookingDate = new Date(booking.createdAt || booking.bookingDate);
+        return bookingDate.getMonth() === monthIndex && booking.paymentStatus === 'paid';
+      });
+      const monthRevenue = monthBookings.reduce((sum, booking) => sum + (booking.totalAmount || 0), 0);
+      
+      return {
+        month,
+        revenue: monthRevenue
+      };
+    });
+  };
+
+  const revenueData = generateRevenueData();
 
   // Booking status distribution
   const bookingStatusData = [
@@ -105,6 +129,14 @@ const AdminDashboard = () => {
       </span>
     );
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -212,19 +244,19 @@ const AdminDashboard = () => {
                   <tr key={booking.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{booking.userName}</div>
-                        <div className="text-sm text-gray-500">{booking.userEmail}</div>
+                        <div className="text-sm font-medium text-gray-900">{booking.userName || booking.user?.name || 'N/A'}</div>
+                        <div className="text-sm text-gray-500">{booking.userEmail || booking.user?.email || 'N/A'}</div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{booking.tourTitle}</div>
-                      <div className="text-sm text-gray-500">{booking.destination}</div>
+                      <div className="text-sm text-gray-900">{booking.tourTitle || booking.tour?.title || 'N/A'}</div>
+                      <div className="text-sm text-gray-500">{booking.destination || booking.tour?.destination || 'N/A'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {getStatusBadge(booking.status)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      ${booking.totalAmount}
+                      ${booking.totalAmount || 0}
                     </td>
                   </tr>
                 ))}
@@ -258,7 +290,7 @@ const AdminDashboard = () => {
                     <div className="text-sm font-medium text-gray-900">{tour.bookingCount} bookings</div>
                     <div className="flex items-center text-sm text-gray-500">
                       <Star className="w-4 h-4 mr-1 text-yellow-400" />
-                      {tour.rating}
+                      {tour.rating || 'N/A'}
                     </div>
                   </div>
                 </div>

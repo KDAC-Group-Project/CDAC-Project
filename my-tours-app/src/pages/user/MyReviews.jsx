@@ -7,10 +7,11 @@ import {
   Trash2,
   Plus
 } from 'lucide-react';
-import { getCurrentUserReviews, createReview, updateReview, deleteReview } from '../../api';
+import { getCurrentUserReviews, createReview, updateReview, deleteReview, getAllTours } from '../../services/api';
 
-const MyReviews = ({ token }) => {
+const MyReviews = () => {
   const [reviews, setReviews] = useState([]);
+  const [tours, setTours] = useState([]);
   const [showAddReview, setShowAddReview] = useState(false);
   const [editingReview, setEditingReview] = useState(null);
   const [modalForm, setModalForm] = useState({
@@ -20,31 +21,55 @@ const MyReviews = ({ token }) => {
   });
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [toursLoading, setToursLoading] = useState(false);
 
   // Fetch reviews on component mount
   useEffect(() => {
     const fetchReviews = async () => {
       try {
         setLoading(true);
-        const data = await getCurrentUserReviews(token);
-        setReviews(data);
-        setError(null);
+        const token = sessionStorage.getItem('token');
+        if (token) {
+          const data = await getCurrentUserReviews(token);
+          setReviews(data);
+          setError(null);
+        }
       } catch (err) {
         setError(err.message);
       } finally {
         setLoading(false);
       }
     };
+
     fetchReviews();
-  }, [token]);
+  }, []);
+
+  // Fetch tours when adding/editing review
+  useEffect(() => {
+    const fetchTours = async () => {
+      try {
+        setToursLoading(true);
+        const data = await getAllTours();
+        setTours(data);
+      } catch (err) {
+        console.error('Failed to fetch tours:', err);
+      } finally {
+        setToursLoading(false);
+      }
+    };
+
+    if (showAddReview || editingReview) {
+      fetchTours();
+    }
+  }, [showAddReview, editingReview]);
 
   // Populate modal form when editing or adding
   useEffect(() => {
     if (editingReview) {
       setModalForm({
-        tourId: editingReview.tour.id,
-        rating: editingReview.rating,
-        comment: editingReview.comment,
+        tourId: editingReview.tourId || editingReview.tour?.id || '',
+        rating: editingReview.rating || 0,
+        comment: editingReview.comment || '',
       });
     } else if (showAddReview) {
       setModalForm({
@@ -83,6 +108,7 @@ const MyReviews = ({ token }) => {
     e.preventDefault();
     console.log('Submitting review:', modalForm);
     try {
+      const token = sessionStorage.getItem('token');
       if (editingReview) {
         // Update review
         const updatedReview = await updateReview(editingReview.id, modalForm, token);
@@ -103,6 +129,7 @@ const MyReviews = ({ token }) => {
   const handleDeleteReview = async (reviewId) => {
     if (window.confirm('Are you sure you want to delete this review?')) {
       try {
+        const token = sessionStorage.getItem('token');
         await deleteReview(reviewId, token);
         setReviews(reviews.filter(review => review.id !== reviewId));
         setError(null);
@@ -132,6 +159,7 @@ const MyReviews = ({ token }) => {
   };
 
   const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString();
   };
 
@@ -195,7 +223,7 @@ const MyReviews = ({ token }) => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Latest Review</p>
               <p className="text-sm font-medium text-gray-900">
-                {reviews.length > 0 ? formatDate(reviews[0].reviewDate) : 'No reviews yet'}
+                {reviews.length > 0 ? formatDate(reviews[0].createdAt) : 'No reviews yet'}
               </p>
             </div>
           </div>
@@ -209,22 +237,22 @@ const MyReviews = ({ token }) => {
             <div className="flex items-start justify-between">
               <div className="flex items-start space-x-4">
                 <img
-                  src={review.tourImage || getImageForDestination(review.tour.destination)}
-                  alt={review.tour.title}
+                  src={review.tourImage || getImageForDestination(review.tourDestination)}
+                  alt={review.tourTitle || 'Tour'}
                   className="w-16 h-16 rounded-lg object-cover"
                 />
                 <div className="flex-1">
                   <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                    {review.tour.title}
+                    {review.tourTitle || 'Tour Title Not Available'}
                   </h3>
                   <div className="flex items-center text-sm text-gray-600 mb-2">
                     <MapPin className="w-4 h-4 mr-1" />
-                    {review.tour.destination}
+                    {review.tourDestination || 'Destination Not Available'}
                   </div>
                   <div className="flex items-center space-x-4 mb-3">
                     {renderStars(review.rating)}
                     <span className="text-sm text-gray-600">
-                      Reviewed on {formatDate(review.reviewDate)}
+                      Reviewed on {formatDate(review.createdAt)}
                     </span>
                   </div>
                   <p className="text-gray-700">{review.comment}</p>
@@ -281,19 +309,24 @@ const MyReviews = ({ token }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Tour Package
                 </label>
-                <select
-                  name="tourId"
-                  value={modalForm.tourId}
-                  onChange={handleModalInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  required
-                >
-                  <option value="">Select a tour package</option>
-                  {/* Assuming tour IDs are known or fetched separately */}
-                  <option value="1">Tropical Paradise Adventure</option>
-                  <option value="2">Mountain Expedition</option>
-                  <option value="3">Cultural Heritage Tour</option>
-                </select>
+                {toursLoading ? (
+                  <div className="text-center py-2 text-gray-500">Loading tours...</div>
+                ) : (
+                  <select
+                    name="tourId"
+                    value={modalForm.tourId}
+                    onChange={handleModalInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  >
+                    <option value="">Select a tour package</option>
+                    {tours.map((tour) => (
+                      <option key={tour.id} value={tour.id}>
+                        {tour.title} - {tour.destination}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

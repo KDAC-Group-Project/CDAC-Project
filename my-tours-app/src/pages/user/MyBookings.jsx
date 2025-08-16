@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import { fetchCurrentUserBookings } from '../../store/slices/bookingsSlice';
 import { 
   Calendar, 
   MapPin, 
@@ -10,25 +11,37 @@ import {
   Search,
   Eye
 } from 'lucide-react';
-import { removeBooking } from '../../store/slices/bookingsSlice';
+import { deleteBooking } from '../../services/api';
 
 const MyBookings = () => {
-  const bookings = useSelector((state) => state.bookings.bookings);
+  const dispatch = useDispatch();
+  const { currentUserBookings, loading, error } = useSelector((state) => state.bookings);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedBooking, setSelectedBooking] = useState(null);
-  const dispatch = useDispatch();
 
-  const handleRemoveBooking = (id) => {
+  // Fetch bookings on component mount
+  useEffect(() => {
+    dispatch(fetchCurrentUserBookings());
+  }, [dispatch]);
+
+  const handleRemoveBooking = async (id) => {
     if(window.confirm('Are you sure you want to remove this booking?')) {
-      dispatch(removeBooking(id));
+      try {
+        const token = sessionStorage.getItem('token');
+        await deleteBooking(id, token);
+        // Refresh bookings from backend after deletion
+        dispatch(fetchCurrentUserBookings());
+      } catch (err) {
+        // Error will be handled by Redux state
+      }
     }
   };
 
-  // Filter bookings for current user (in a real app, this would be based on user ID)
-  const userBookings = bookings.filter(booking => {
-    const matchesSearch = booking.tourTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         booking.destination.toLowerCase().includes(searchQuery.toLowerCase());
+  // Filter bookings for current user
+  const filteredBookings = currentUserBookings.filter(booking => {
+    const matchesSearch = booking.tourTitle?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         booking.destination?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === '' || booking.status === statusFilter;
     
     return matchesSearch && matchesStatus;
@@ -36,38 +49,56 @@ const MyBookings = () => {
 
   const getStatusBadge = (status) => {
     const statusStyles = {
-      confirmed: 'bg-green-100 text-green-800',
-      pending: 'bg-yellow-100 text-yellow-800',
-      cancelled: 'bg-red-100 text-red-800',
-      completed: 'bg-blue-100 text-blue-800'
+      CONFIRMED: 'bg-green-100 text-green-800',
+      PENDING: 'bg-yellow-100 text-yellow-800',
+      CANCELLED: 'bg-red-100 text-red-800',
+      COMPLETED: 'bg-blue-100 text-blue-800'
     };
     
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusStyles[status]}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusStyles[status] || statusStyles.PENDING}`}>
+        {status?.charAt(0).toUpperCase() + status?.slice(1).toLowerCase() || 'Pending'}
       </span>
     );
   };
 
   const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString();
   };
 
-  const upcomingBookings = userBookings.filter(booking => 
-    booking.status === 'confirmed' && new Date(booking.travelDate) > new Date()
+  const upcomingBookings = filteredBookings.filter(booking => 
+    booking.status === 'CONFIRMED' && new Date(booking.travelDate) > new Date()
   );
 
-  const pastBookings = userBookings.filter(booking => 
-    booking.status === 'completed' || new Date(booking.travelDate) < new Date()
+  const pastBookings = filteredBookings.filter(booking => 
+    booking.status === 'COMPLETED' || new Date(booking.travelDate) < new Date()
   );
+
+  if (loading) {
+    return (
+      <div className="text-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
+        <p className="mt-4 text-gray-600">Loading your bookings...</p>
+      </div>
+    );
+  }
+
+
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg">
+          {error}
+        </div>
+      )}
+      
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">My Bookings</h1>
         <div className="flex items-center px-4 py-2 bg-emerald-100 text-emerald-800 rounded-lg">
           <Calendar className="w-5 h-5 mr-2" />
-          <span className="font-medium">{userBookings.length} Total Bookings</span>
+          <span className="font-medium">{currentUserBookings.length} Total Bookings</span>
         </div>
       </div>
 
@@ -105,7 +136,7 @@ const MyBookings = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Spent</p>
               <p className="text-2xl font-bold text-gray-900">
-                ${userBookings.reduce((sum, booking) => sum + booking.totalAmount, 0)}
+                ${currentUserBookings.reduce((sum, booking) => sum + (parseFloat(booking.totalAmount) || 0), 0).toFixed(2)}
               </p>
             </div>
           </div>
@@ -132,38 +163,38 @@ const MyBookings = () => {
             className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
           >
             <option value="">All Status</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="pending">Pending</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="completed">Completed</option>
+            <option value="CONFIRMED">Confirmed</option>
+            <option value="PENDING">Pending</option>
+            <option value="CANCELLED">Cancelled</option>
+            <option value="COMPLETED">Completed</option>
           </select>
           
           <div className="flex items-center text-sm text-gray-600">
             <Filter className="w-4 h-4 mr-2" />
-            {userBookings.length} bookings found
+            {filteredBookings.length} bookings found
           </div>
         </div>
       </div>
 
       {/* Bookings List */}
       <div className="space-y-4">
-        {userBookings.map((booking) => (
+                    {filteredBookings.map((booking) => (
           <div key={booking.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow">
             <div className="p-6">
               <div className="flex items-start justify-between">
                 <div className="flex items-start space-x-4">
                   <img
-                    src={booking.tourImage}
+                    src={booking.tourImage || 'https://images.pexels.com/photos/1287460/pexels-photo-1287460.jpeg?auto=compress&cs=tinysrgb&w=400'}
                     alt={booking.tourTitle}
                     className="w-20 h-20 rounded-lg object-cover"
                   />
                   <div className="flex-1">
                     <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                      {booking.tourTitle}
+                      {booking.tourTitle || 'Tour Title Not Available'}
                     </h3>
                     <div className="flex items-center text-sm text-gray-600 mb-2">
                       <MapPin className="w-4 h-4 mr-1" />
-                      {booking.destination}
+                      {booking.destination || 'Destination Not Available'}
                     </div>
                     <div className="flex items-center space-x-4 text-sm text-gray-600">
                       <div className="flex items-center">
@@ -172,14 +203,14 @@ const MyBookings = () => {
                       </div>
                       <div className="flex items-center">
                         <Users className="w-4 h-4 mr-1" />
-                        {booking.guests} guests
+                        {booking.guests || 0} guests
                       </div>
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="text-lg font-bold text-gray-900 mb-2">
-                    ${booking.totalAmount}
+                    ${parseFloat(booking.totalAmount || 0).toFixed(2)}
                   </div>
                   {getStatusBadge(booking.status)}
                 </div>
@@ -209,7 +240,7 @@ const MyBookings = () => {
         ))}
       </div>
 
-      {userBookings.length === 0 && (
+              {filteredBookings.length === 0 && (
         <div className="text-center py-12">
           <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2">No bookings found</h3>
@@ -219,12 +250,13 @@ const MyBookings = () => {
               : "You haven't made any bookings yet."}
           </p>
           {!searchQuery && !statusFilter && (
-            <button className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg">
+            <a href="/user/tours" className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg">
               Browse Tours
-            </button>
+            </a>
           )}
         </div>
       )}
+      
       {/* Booking Details Modal */}
       {selectedBooking && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -236,13 +268,17 @@ const MyBookings = () => {
               &times;
             </button>
             <h2 className="text-2xl font-bold mb-4">Booking Details</h2>
-            <img src={selectedBooking.tourImage} alt={selectedBooking.tourTitle} className="w-full h-40 object-cover rounded-lg mb-4" />
-            <div className="mb-2"><strong>Tour:</strong> {selectedBooking.tourTitle}</div>
-            <div className="mb-2"><strong>Destination:</strong> {selectedBooking.destination}</div>
-            <div className="mb-2"><strong>Guests:</strong> {selectedBooking.guests}</div>
+            <img 
+              src={selectedBooking.tourImage || 'https://images.pexels.com/photos/1287460/pexels-photo-1287460.jpeg?auto=compress&cs=tinysrgb&w=400'} 
+              alt={selectedBooking.tourTitle} 
+              className="w-full h-40 object-cover rounded-lg mb-4" 
+            />
+            <div className="mb-2"><strong>Tour:</strong> {selectedBooking.tourTitle || 'N/A'}</div>
+            <div className="mb-2"><strong>Destination:</strong> {selectedBooking.destination || 'N/A'}</div>
+            <div className="mb-2"><strong>Guests:</strong> {selectedBooking.guests || 0}</div>
             <div className="mb-2"><strong>Travel Dates:</strong> {formatDate(selectedBooking.travelDate)} - {formatDate(selectedBooking.endDate)}</div>
             <div className="mb-2"><strong>Status:</strong> {getStatusBadge(selectedBooking.status)}</div>
-            <div className="mb-2"><strong>Total Amount:</strong> ${selectedBooking.totalAmount}</div>
+            <div className="mb-2"><strong>Total Amount:</strong> ${parseFloat(selectedBooking.totalAmount || 0).toFixed(2)}</div>
             <div className="mb-2"><strong>Booked On:</strong> {formatDate(selectedBooking.bookingDate)}</div>
           </div>
         </div>

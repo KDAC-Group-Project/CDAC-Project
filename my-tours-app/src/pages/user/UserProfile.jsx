@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { 
   User, 
   Mail, 
@@ -12,52 +12,101 @@ import {
   Plane
 } from 'lucide-react';
 import { AuthContext } from '../../contexts/AuthContext';
-import { useSelector } from 'react-redux';
-import { updateUserProfile } from '../../api';
+import { useSelector, useDispatch } from 'react-redux';
+import { updateUserProfile, getCurrentUserReviews, loginUser } from '../../services/api';
+import api from '../../services/api';
+import { fetchCurrentUserBookings } from '../../store/slices/bookingsSlice';
 
 const UserProfile = () => {
   const { user, setUser } = useContext(AuthContext);
-  const bookings = useSelector((state) => state.bookings.bookings);
+  const dispatch = useDispatch();
+  const currentUserBookings = useSelector((state) => state.bookings.currentUserBookings);
   // Get reviews from localStorage (as MyReviews uses local state)
-  const reviews = JSON.parse(localStorage.getItem('myReviews') || '[]');
+  const [reviews, setReviews] = useState([]);
 
-  // Calculate stats
-  const completedTrips = bookings.filter(b => b.status === 'completed').length;
-  const countriesVisited = Array.from(new Set(bookings.map(b => b.destination))).length;
+  useEffect(() => {
+    if (user) {
+      dispatch(fetchCurrentUserBookings());
+      // fetch current user reviews from backend
+      (async () => {
+        try {
+          const data = await api.get('/api/reviews/my-reviews');
+          setReviews(Array.isArray(data.data) ? data.data : []);
+        } catch (e) {
+          // ignore
+        }
+      })();
+    }
+  }, [dispatch, user]);
+
+  // Calculate stats from real data
+  const completedTrips = currentUserBookings.filter(b => b.status === 'COMPLETED').length;
+  const countriesVisited = Array.from(new Set(currentUserBookings.map(b => b.destination || b.tour?.destination).filter(Boolean))).length;
   const reviewsGiven = reviews.length;
-  const totalSpent = 15750; // This is a placeholder, actual total spent would need to be tracked
-  const memberSince = '2023-06-15'; // This is a placeholder, actual member since would need to be tracked
-  const favoriteDestination = 'Maldives'; // This is a placeholder, actual favorite destination would need to be tracked
+  const totalSpent = currentUserBookings
+    .filter(b => b.paymentStatus === 'PAID')
+    .reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+  const memberSince = user?.joinDate || user?.createdAt || user?.registrationDate || 'N/A';
+  const favoriteDestination = currentUserBookings.length > 0 
+    ? currentUserBookings.reduce((fav, booking) => {
+        const dest = booking.destination || booking.tour?.destination;
+        if (!dest) return fav;
+        const count = currentUserBookings.filter(b => 
+          (b.destination || b.tour?.destination) === dest
+        ).length;
+        return count > (fav.count || 0) ? { destination: dest, count } : fav;
+      }, {}).destination || 'N/A'
+    : 'N/A';
+
+  // Recent trips from actual bookings
+  const recentTrips = currentUserBookings
+    .filter(booking => booking.status === 'COMPLETED' || booking.status === 'CONFIRMED')
+    .sort((a, b) => new Date(b.startDate || b.travelDate || b.bookingDate) - new Date(a.startDate || a.travelDate || a.bookingDate))
+    .slice(0, 3)
+    .map(booking => ({
+      destination: booking.destination || booking.tour?.destination || 'Unknown',
+      date: booking.startDate || booking.travelDate || booking.bookingDate,
+      image: booking.tour?.imageUrl || 'https://images.pexels.com/photos/1287460/pexels-photo-1287460.jpeg?auto=compress&cs=tinysrgb&w=200'
+    }));
 
   const [isEditing, setIsEditing] = useState(false);
   const [profileData, setProfileData] = useState({
     firstName: user?.firstName || '',
     lastName: user?.lastName || '',
-    email: user?.email || 'john@example.com',
-    phone: user?.phone || '+1 (555) 123-4567',
-    dateOfBirth: user?.dateOfBirth || '1990-05-15',
-    address: user?.address || '123 Main St, New York, NY 10001',
+    email: user?.email || '',
+    phone: user?.phone || '',
+    address: user?.address || '',
     bio: user?.bio || 'Travel enthusiast who loves exploring new cultures and destinations.',
-    avatar: user?.avatar || 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=150'
+    avatar: user?.avatar || user?.avatarUrl || 'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&w=150'
   });
 
-  const recentTrips = [
-    {
-      destination: 'Maldives',
-      date: '2024-01-15',
-      image: 'https://images.pexels.com/photos/1287460/pexels-photo-1287460.jpeg?auto=compress&cs=tinysrgb&w=200'
-    },
-    {
-      destination: 'Swiss Alps',
-      date: '2023-12-10',
-      image: 'https://images.pexels.com/photos/618833/pexels-photo-618833.jpeg?auto=compress&cs=tinysrgb&w=200'
-    },
-    {
-      destination: 'India',
-      date: '2023-11-05',
-      image: 'https://images.pexels.com/photos/2161467/pexels-photo-2161467.jpeg?auto=compress&cs=tinysrgb&w=200'
-    }
-  ];
+  // Fetch current user details from backend so phone/address populate from DB
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get('/api/user/me');
+        const current = res.data;
+        // Update context and session storage for consistency
+        setUser(current);
+        if (current.firstName) sessionStorage.setItem('firstName', current.firstName);
+        if (current.lastName) sessionStorage.setItem('lastName', current.lastName);
+        if (current.avatarUrl) sessionStorage.setItem('avatar', current.avatarUrl);
+        if (current.role) sessionStorage.setItem('role', (current.role.name || current.role).toString().toLowerCase());
+        // Populate local form state
+        setProfileData(prev => ({
+          ...prev,
+          firstName: current.firstName || prev.firstName,
+          lastName: current.lastName || prev.lastName,
+          email: current.email || prev.email,
+          phone: current.phoneNumber || prev.phone,
+          address: current.address || prev.address,
+          avatar: current.avatarUrl || prev.avatar,
+        }));
+      } catch (_) {
+        // ignore fetch errors; page still renders with available data
+      }
+    })();
+  }, [setUser]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -88,6 +137,7 @@ const UserProfile = () => {
       lastName: profileData.lastName,
       phoneNumber: profileData.phone, // Map to phoneNumber
       avatarUrl: profileData.avatar,  // Map to avatarUrl
+      address: profileData.address,
     };
 
     try {
@@ -97,6 +147,9 @@ const UserProfile = () => {
       sessionStorage.setItem('firstName', updatedUser.firstName);
       sessionStorage.setItem('lastName', updatedUser.lastName);
       sessionStorage.setItem('avatar', updatedUser.avatarUrl);
+      if (updatedUser.address) {
+        sessionStorage.setItem('address', updatedUser.address);
+      }
     } catch (err) {
       alert('Failed to update profile: ' + err.message);
     }
@@ -223,22 +276,7 @@ const UserProfile = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Date of Birth
-                </label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="date"
-                    name="dateOfBirth"
-                    value={profileData.dateOfBirth}
-                    onChange={handleInputChange}
-                    disabled={!isEditing}
-                    className="pl-10 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50"
-                  />
-                </div>
-              </div>
+              
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

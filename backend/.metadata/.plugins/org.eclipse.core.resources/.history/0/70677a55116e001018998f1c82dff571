@@ -1,0 +1,4 @@
+jwt:
+  secret: "your-very-secret-jwt-key"
+  expiration: 86400000 # 1 day in milliseconds
+# Add other properties as needed, e.g. database, mail, etc.

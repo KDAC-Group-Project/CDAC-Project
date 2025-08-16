@@ -1,0 +1,3 @@
+jwt:
+  secret: "your-very-secret-jwt-key"
+# Add other properties as needed, e.g. database, mail, etc.

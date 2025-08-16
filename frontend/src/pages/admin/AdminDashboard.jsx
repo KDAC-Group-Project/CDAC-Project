@@ -10,7 +10,6 @@ import {
   MapPin,
   Clock
 } from 'lucide-react';
-
 import { fetchTours } from '../../store/slices/toursSlice';
 import { fetchAllBookings, fetchBookingStats } from '../../store/slices/bookingsSlice';
 import { fetchAllUsers } from '../../store/slices/usersSlice';

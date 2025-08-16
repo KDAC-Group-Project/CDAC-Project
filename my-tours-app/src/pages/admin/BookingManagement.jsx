@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { updateBooking } from '../../store/slices/bookingsSlice';
+import { fetchAllBookings, updateBookingStatus } from '../../store/slices/bookingsSlice';
 import { toast } from 'react-toastify';
 import { 
   Calendar, 
@@ -19,6 +19,12 @@ import {
 const BookingManagement = () => {
   const dispatch = useDispatch();
   const bookings = useSelector((state) => state.bookings.bookings);
+  const loading = useSelector((state) => state.bookings.loading);
+  const error = useSelector((state) => state.bookings.error);
+
+  useEffect(() => {
+    dispatch(fetchAllBookings());
+  }, [dispatch]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedBooking, setSelectedBooking] = useState(null);
@@ -28,46 +34,47 @@ const BookingManagement = () => {
     const matchesSearch = booking.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          booking.tourTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          booking.userEmail.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === '' || booking.status === statusFilter;
+    const matchesStatus = statusFilter === '' || (booking.status === statusFilter || booking.status === statusFilter.toLowerCase());
     
     return matchesSearch && matchesStatus;
   });
 
   const getStatusBadge = (status) => {
+    const normalized = (status || '').toUpperCase();
     const statusStyles = {
-      confirmed: 'bg-green-100 text-green-800',
-      pending: 'bg-yellow-100 text-yellow-800',
-      cancelled: 'bg-red-100 text-red-800',
-      completed: 'bg-blue-100 text-blue-800'
+      CONFIRMED: 'bg-green-100 text-green-800',
+      PENDING: 'bg-yellow-100 text-yellow-800',
+      CANCELLED: 'bg-red-100 text-red-800',
+      COMPLETED: 'bg-blue-100 text-blue-800'
     };
-    
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusStyles[status]}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusStyles[normalized] || 'bg-gray-100 text-gray-800'}`}>
+        {normalized.charAt(0) + normalized.slice(1).toLowerCase()}
       </span>
     );
   };
 
   const getPaymentStatusBadge = (status) => {
+    const normalized = (status || '').toUpperCase();
     const statusStyles = {
-      paid: 'bg-green-100 text-green-800',
-      pending: 'bg-yellow-100 text-yellow-800',
-      refunded: 'bg-gray-100 text-gray-800'
+      PAID: 'bg-green-100 text-green-800',
+      PENDING: 'bg-yellow-100 text-yellow-800',
+      REFUNDED: 'bg-gray-100 text-gray-800'
     };
-    
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusStyles[status]}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusStyles[normalized] || 'bg-gray-100 text-gray-800'}`}>
+        {normalized.charAt(0) + normalized.slice(1).toLowerCase()}
       </span>
     );
   };
 
-  const handleStatusUpdate = (bookingId, newStatus) => {
-    const booking = bookings.find(b => b.id === bookingId);
-    if (booking) {
-      const updatedBooking = { ...booking, status: newStatus };
-      dispatch(updateBooking(updatedBooking));
-      toast.success(`Booking status updated to ${newStatus}`);
+  const handleStatusUpdate = async (bookingId, newStatus) => {
+    try {
+      const enumStatus = (newStatus || '').toUpperCase();
+      await dispatch(updateBookingStatus({ id: bookingId, status: enumStatus })).unwrap();
+      toast.success(`Booking status updated to ${enumStatus}`);
+    } catch (e) {
+      toast.error(typeof e === 'string' ? e : 'Failed to update booking status');
     }
   };
 
@@ -80,7 +87,7 @@ const BookingManagement = () => {
     return new Date(dateString).toLocaleDateString();
   };
 
-  const statusOptions = ['confirmed', 'pending', 'cancelled', 'completed'];
+  const statusOptions = ['CONFIRMED', 'PENDING', 'CANCELLED', 'COMPLETED'];
 
   return (
     <div className="space-y-6">
@@ -112,10 +119,9 @@ const BookingManagement = () => {
             className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Status</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="pending">Pending</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="completed">Completed</option>
+            {statusOptions.map(opt => (
+              <option key={opt} value={opt}>{opt.charAt(0) + opt.slice(1).toLowerCase()}</option>
+            ))}
           </select>
           
           <div className="flex items-center text-sm text-gray-600">
@@ -207,17 +213,17 @@ const BookingManagement = () => {
                       >
                         <Eye className="w-4 h-4" />
                       </button>
-                      {booking.status === 'pending' && (
+                      {(booking.status === 'PENDING' || booking.status === 'pending') && (
                         <>
                           <button
-                            onClick={() => handleStatusUpdate(booking.id, 'confirmed')}
+                            onClick={() => handleStatusUpdate(booking.id, 'CONFIRMED')}
                             className="text-green-600 hover:text-green-900"
                             title="Confirm Booking"
                           >
                             <Check className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => handleStatusUpdate(booking.id, 'cancelled')}
+                            onClick={() => handleStatusUpdate(booking.id, 'CANCELLED')}
                             className="text-red-600 hover:text-red-900"
                             title="Cancel Booking"
                           >
@@ -225,9 +231,9 @@ const BookingManagement = () => {
                           </button>
                         </>
                       )}
-                      {booking.status === 'confirmed' && (
+                      {(booking.status === 'CONFIRMED' || booking.status === 'confirmed') && (
                         <button
-                          onClick={() => handleStatusUpdate(booking.id, 'completed')}
+                          onClick={() => handleStatusUpdate(booking.id, 'COMPLETED')}
                           className="text-purple-600 hover:text-purple-900"
                           title="Mark as Completed"
                         >

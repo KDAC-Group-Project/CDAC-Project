@@ -1,5 +1,5 @@
-import React from 'react';
-import { useSelector } from 'react-redux';
+import React, { useEffect } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
 import { 
   Users, 
   Package, 
@@ -10,13 +10,24 @@ import {
   MapPin,
   Clock
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
+import { fetchTours } from '../../store/slices/toursSlice';
+import { fetchAllBookings, fetchBookingStats } from '../../store/slices/bookingsSlice';
+import { fetchAllUsers } from '../../store/slices/usersSlice';
 
 const AdminDashboard = () => {
+  const dispatch = useDispatch();
   const tours = useSelector((state) => state.tours.tours);
   const bookings = useSelector((state) => state.bookings.bookings);
   const users = useSelector((state) => state.users.users);
-  const totalRevenue = useSelector((state) => state.bookings.totalRevenue);
+  const totalRevenue = useSelector((state) => state.bookings.stats?.totalRevenue || 0);
+  const loading = useSelector((state) => state.bookings.loading || state.tours.loading || state.users.loading);
+
+  useEffect(() => {
+    dispatch(fetchTours());
+    dispatch(fetchAllBookings());
+    dispatch(fetchAllUsers());
+    dispatch(fetchBookingStats());
+  }, [dispatch]);
 
   const activePackages = tours.filter(tour => tour.isActive).length;
   const totalUsers = users.filter(user => user.role === 'user').length;
@@ -25,7 +36,7 @@ const AdminDashboard = () => {
 
   // Recent bookings for the table
   const recentBookings = [...bookings]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .sort((a, b) => new Date(b.createdAt || b.bookingDate).getTime() - new Date(a.createdAt || a.bookingDate).getTime())
     .slice(0, 5);
 
   // Popular tours based on bookings
@@ -33,24 +44,6 @@ const AdminDashboard = () => {
     ...tour,
     bookingCount: bookings.filter(booking => booking.tourId === tour.id).length
   })).sort((a, b) => b.bookingCount - a.bookingCount).slice(0, 5);
-
-  // Revenue chart data
-  const revenueData = [
-    { month: 'Jan', revenue: 12000 },
-    { month: 'Feb', revenue: 15000 },
-    { month: 'Mar', revenue: 18000 },
-    { month: 'Apr', revenue: 22000 },
-    { month: 'May', revenue: 25000 },
-    { month: 'Jun', revenue: 28000 }
-  ];
-
-  // Booking status distribution
-  const bookingStatusData = [
-    { name: 'Confirmed', value: bookings.filter(b => b.status === 'confirmed').length, color: '#10B981' },
-    { name: 'Pending', value: bookings.filter(b => b.status === 'pending').length, color: '#F59E0B' },
-    { name: 'Cancelled', value: bookings.filter(b => b.status === 'cancelled').length, color: '#EF4444' },
-    { name: 'Completed', value: bookings.filter(b => b.status === 'completed').length, color: '#3B82F6' }
-  ];
 
   const stats = [
     {
@@ -106,6 +99,14 @@ const AdminDashboard = () => {
     );
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -142,45 +143,7 @@ const AdminDashboard = () => {
         })}
       </div>
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Revenue Chart */}
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Revenue Trend</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={revenueData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip formatter={(value) => [`$${value}`, 'Revenue']} />
-              <Line type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={3} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Booking Status Distribution */}
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Booking Status Distribution</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={bookingStatusData}
-                cx="50%"
-                cy="50%"
-                outerRadius={100}
-                fill="#8884d8"
-                dataKey="value"
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-              >
-                {bookingStatusData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+      
 
       {/* Tables Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -212,19 +175,19 @@ const AdminDashboard = () => {
                   <tr key={booking.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{booking.userName}</div>
-                        <div className="text-sm text-gray-500">{booking.userEmail}</div>
+                        <div className="text-sm font-medium text-gray-900">{booking.userName || booking.user?.name || 'N/A'}</div>
+                        <div className="text-sm text-gray-500">{booking.userEmail || booking.user?.email || 'N/A'}</div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{booking.tourTitle}</div>
-                      <div className="text-sm text-gray-500">{booking.destination}</div>
+                      <div className="text-sm text-gray-900">{booking.tourTitle || booking.tour?.title || 'N/A'}</div>
+                      <div className="text-sm text-gray-500">{booking.destination || booking.tour?.destination || 'N/A'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {getStatusBadge(booking.status)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      ${booking.totalAmount}
+                      ${booking.totalAmount || 0}
                     </td>
                   </tr>
                 ))}
@@ -258,7 +221,7 @@ const AdminDashboard = () => {
                     <div className="text-sm font-medium text-gray-900">{tour.bookingCount} bookings</div>
                     <div className="flex items-center text-sm text-gray-500">
                       <Star className="w-4 h-4 mr-1 text-yellow-400" />
-                      {tour.rating}
+                      {tour.rating || 'N/A'}
                     </div>
                   </div>
                 </div>

@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDispatch } from 'react-redux';
-import { addTour } from '../../store/slices/toursSlice';
+import { createTour } from '../../services/api';
 import { toast } from 'react-toastify';
 import { ArrowLeft, Upload, Plus, X } from 'lucide-react';
 
-const AddPackage = () => {
+const AddPackage = ({ token }) => {
   const navigate = useNavigate();
-  const dispatch = useDispatch();
   
   const [formData, setFormData] = useState({
     title: '',
@@ -28,8 +26,8 @@ const AddPackage = () => {
   const [includeItem, setIncludeItem] = useState('');
   const [imagePreview, setImagePreview] = useState('');
 
-  const categories = ['Beach', 'Adventure', 'Cultural', 'Wildlife', 'City', 'Mountain'];
-  const difficulties = ['easy', 'moderate', 'difficult'];
+  const categories = ['BEACH', 'ADVENTURE', 'CULTURAL', 'WILDLIFE', 'CITY', 'MOUNTAIN', 'CRUISE', 'FOOD'];
+  const difficulties = ['EASY', 'MODERATE', 'DIFFICULT'];
 
   const handleInputChange = (e) => {
     const { name, value, type } = e.target;
@@ -63,7 +61,7 @@ const AddPackage = () => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     if (!formData.title.trim()) {
@@ -87,15 +85,28 @@ const AddPackage = () => {
       return;
     }
 
-    const newTour = {
-      ...formData,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString()
-    };
+    try {
+      const tourData = {
+        title: formData.title,
+        description: formData.description,
+        price: formData.price,
+        duration: formData.duration,
+        destination: formData.destination,
+        category: formData.category,
+        imageUrl: formData.image,
+        maxGroupSize: formData.maxGroupSize,
+        difficulty: String(formData.difficulty || '').toUpperCase(),
+        includes: formData.includes,
+        isActive: formData.isActive
+      };
 
-    dispatch(addTour(newTour));
-    toast.success('Package created successfully!');
-    navigate('/admin/packages');
+      await createTour(tourData, token);
+      toast.success('Package created successfully!');
+      navigate('/admin/packages');
+    } catch (error) {
+      console.error('Failed to create tour:', error);
+      toast.error(error.message || 'Failed to create package');
+    }
   };
 
   return (

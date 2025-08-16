@@ -17,7 +17,7 @@ const ViewPackage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const tour = useSelector((state) => 
-    state.tours.tours.find(t => t.id === id)
+    state.tours.tours.find(t => String(t.id) === String(id))
   );
 
   if (!tour) {
@@ -35,10 +35,11 @@ const ViewPackage = () => {
   }
 
   const getDifficultyColor = (difficulty) => {
-    switch (difficulty) {
-      case 'easy': return 'bg-green-100 text-green-800';
-      case 'moderate': return 'bg-yellow-100 text-yellow-800';
-      case 'difficult': return 'bg-red-100 text-red-800';
+    const d = (difficulty || '').toString().toUpperCase();
+    switch (d) {
+      case 'EASY': return 'bg-green-100 text-green-800';
+      case 'MODERATE': return 'bg-yellow-100 text-yellow-800';
+      case 'DIFFICULT': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -68,7 +69,7 @@ const ViewPackage = () => {
         {/* Header Image */}
         <div className="relative h-64 md:h-80">
           <img
-            src={tour.image}
+            src={tour.tourImage || tour.imageUrl || tour.image || 'https://via.placeholder.com/960x480?text=Package'}
             alt={tour.title}
             className="w-full h-full object-cover"
           />
@@ -84,7 +85,7 @@ const ViewPackage = () => {
                   {tour.category}
                 </span>
                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${getDifficultyColor(tour.difficulty)}`}>
-                  {tour.difficulty.charAt(0).toUpperCase() + tour.difficulty.slice(1)}
+                  {(tour.difficulty || '').toString().charAt(0).toUpperCase() + (tour.difficulty || '').toString().slice(1).toLowerCase()}
                 </span>
               </div>
               <h2 className="text-3xl font-bold">{tour.title}</h2>
@@ -109,7 +110,7 @@ const ViewPackage = () => {
               <div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-3">What's Included</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {tour.includes.map((item, index) => (
+                  {(tour.includes || []).map((item, index) => (
                     <div key={index} className="flex items-center bg-gray-50 px-3 py-2 rounded-lg">
                       <Shield className="w-4 h-4 text-green-500 mr-2" />
                       <span className="text-sm text-gray-700">{item}</span>

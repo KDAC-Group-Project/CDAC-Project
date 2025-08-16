@@ -10,7 +10,7 @@ import {
   MapPin,
   Clock
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
+
 import { fetchTours } from '../../store/slices/toursSlice';
 import { fetchAllBookings, fetchBookingStats } from '../../store/slices/bookingsSlice';
 import { fetchAllUsers } from '../../store/slices/usersSlice';
@@ -45,36 +45,6 @@ const AdminDashboard = () => {
     ...tour,
     bookingCount: bookings.filter(booking => booking.tourId === tour.id).length
   })).sort((a, b) => b.bookingCount - a.bookingCount).slice(0, 5);
-
-  // Revenue chart data - derive from actual bookings data
-  const generateRevenueData = () => {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const currentMonth = new Date().getMonth();
-    
-    return months.slice(Math.max(0, currentMonth - 5), currentMonth + 1).map((month, index) => {
-      const monthIndex = (currentMonth - 5 + index + 12) % 12;
-      const monthBookings = bookings.filter(booking => {
-        const bookingDate = new Date(booking.createdAt || booking.bookingDate);
-        return bookingDate.getMonth() === monthIndex && booking.paymentStatus === 'paid';
-      });
-      const monthRevenue = monthBookings.reduce((sum, booking) => sum + (booking.totalAmount || 0), 0);
-      
-      return {
-        month,
-        revenue: monthRevenue
-      };
-    });
-  };
-
-  const revenueData = generateRevenueData();
-
-  // Booking status distribution
-  const bookingStatusData = [
-    { name: 'Confirmed', value: bookings.filter(b => b.status === 'confirmed').length, color: '#10B981' },
-    { name: 'Pending', value: bookings.filter(b => b.status === 'pending').length, color: '#F59E0B' },
-    { name: 'Cancelled', value: bookings.filter(b => b.status === 'cancelled').length, color: '#EF4444' },
-    { name: 'Completed', value: bookings.filter(b => b.status === 'completed').length, color: '#3B82F6' }
-  ];
 
   const stats = [
     {
@@ -174,45 +144,7 @@ const AdminDashboard = () => {
         })}
       </div>
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Revenue Chart */}
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Revenue Trend</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={revenueData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip formatter={(value) => [`$${value}`, 'Revenue']} />
-              <Line type="monotone" dataKey="revenue" stroke="#3B82F6" strokeWidth={3} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Booking Status Distribution */}
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Booking Status Distribution</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={bookingStatusData}
-                cx="50%"
-                cy="50%"
-                outerRadius={100}
-                fill="#8884d8"
-                dataKey="value"
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-              >
-                {bookingStatusData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+      
 
       {/* Tables Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

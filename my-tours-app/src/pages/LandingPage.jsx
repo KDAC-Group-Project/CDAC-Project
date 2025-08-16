@@ -1,8 +1,22 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useSelector, useDispatch } from 'react-redux';
 import { ArrowRight, Star, Users, MapPin, Calendar, Shield } from 'lucide-react';
+import { fetchTours } from '../store/slices/toursSlice';
 
 const LandingPage = () => {
+  const dispatch = useDispatch();
+  const { tours, status } = useSelector((state) => state.tours);
+
+  useEffect(() => {
+    if (status === 'idle') {
+      dispatch(fetchTours());
+    }
+  }, [dispatch, status]);
+
+  // Get top 3 tours by rating or just first 3 if no ratings
+  const popularTours = tours?.slice(0, 3) || [];
+
   const features = [
     {
       icon: <MapPin className="w-8 h-8 text-blue-600" />,
@@ -23,36 +37,6 @@ const LandingPage = () => {
       icon: <Calendar className="w-8 h-8 text-purple-600" />,
       title: 'Flexible Booking',
       description: 'Easy booking process with flexible cancellation and rescheduling options.'
-    }
-  ];
-
-  const popularTours = [
-    {
-      id: 1,
-      title: 'Tropical Paradise Adventure',
-      image: 'https://images.pexels.com/photos/1287460/pexels-photo-1287460.jpeg?auto=compress&cs=tinysrgb&w=400',
-      destination: 'Maldives',
-      rating: 4.8,
-      price: 1299,
-      duration: 7
-    },
-    {
-      id: 2,
-      title: 'Mountain Expedition',
-      image: 'https://images.pexels.com/photos/618833/pexels-photo-618833.jpeg?auto=compress&cs=tinysrgb&w=400',
-      destination: 'Swiss Alps',
-      rating: 4.9,
-      price: 899,
-      duration: 5
-    },
-    {
-      id: 3,
-      title: 'Cultural Heritage Tour',
-      image: 'https://images.pexels.com/photos/2161467/pexels-photo-2161467.jpeg?auto=compress&cs=tinysrgb&w=400',
-      destination: 'India',
-      rating: 4.7,
-      price: 756,
-      duration: 6
     }
   ];
 
@@ -145,31 +129,42 @@ const LandingPage = () => {
               Discover our most loved destinations and experiences.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {popularTours.map((tour) => (
-              <div key={tour.id} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
-                <img
-                  src={tour.image}
-                  alt={tour.title}
-                  className="w-full h-48 object-cover"
-                />
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-blue-600 font-medium">{tour.destination}</span>
-                    <div className="flex items-center">
-                      <Star className="w-4 h-4 text-yellow-400 fill-current" />
-                      <span className="text-sm text-gray-600 ml-1">{tour.rating}</span>
+          {status === 'loading' ? (
+            <div className="text-center py-8">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <p className="mt-2 text-gray-600">Loading tours...</p>
+            </div>
+          ) : popularTours.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {popularTours.map((tour) => (
+                <div key={tour.id} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
+                  <img
+                    src={tour.imageUrl || tour.image || 'https://images.pexels.com/photos/1287460/pexels-photo-1287460.jpeg?auto=compress&cs=tinysrgb&w=400'}
+                    alt={tour.name || tour.title}
+                    className="w-full h-48 object-cover"
+                  />
+                  <div className="p-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-blue-600 font-medium">{tour.destination}</span>
+                      <div className="flex items-center">
+                        <Star className="w-4 h-4 text-yellow-400 fill-current" />
+                        <span className="text-sm text-gray-600 ml-1">{tour.rating || 4.5}</span>
+                      </div>
+                    </div>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-3">{tour.name || tour.title}</h3>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">{tour.duration || 5} days</span>
+                      <span className="text-2xl font-bold text-blue-600">${tour.price || 0}</span>
                     </div>
                   </div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-3">{tour.title}</h3>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">{tour.duration} days</span>
-                    <span className="text-2xl font-bold text-blue-600">${tour.price}</span>
-                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-gray-600">No tours available at the moment.</p>
+            </div>
+          )}
           <div className="text-center mt-12">
             <Link
               to="/register"
